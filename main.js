@@ -69,6 +69,25 @@ const BELT_SLOT_X = (canvas.width / 2) - (BELT_SLOT_SIZE / 2); // Centered horiz
 const BELT_SLOT_Y = canvas.height - BELT_SLOT_SIZE - 10; // Near bottom, 10px padding
 const BELT_ITEM_MARGIN = 4; // Margin for the item inside the slot
 
+// Digit Rendering Constants
+const DIGIT_PIXEL_SIZE = 2; // How big each "pixel" of the digit is
+const DIGIT_COLOR = [1.0, 1.0, 1.0, 1.0]; // White for text
+const DIGIT_PATTERNS = {
+  '0': [[0,0],[1,0],[2,0], [0,1],[2,1], [0,2],[2,2], [0,3],[2,3], [0,4],[1,4],[2,4]],
+  '1': [[1,0],[1,1],[1,2],[1,3],[1,4]],
+  '2': [[0,0],[1,0],[2,0], [2,1], [0,2],[1,2],[2,2], [0,3], [0,4],[1,4],[2,4]],
+  '3': [[0,0],[1,0],[2,0], [2,1], [1,2],[2,2], [2,3], [0,4],[1,4],[2,4]],
+  '4': [[0,0],[2,0], [0,1],[2,1], [0,2],[1,2],[2,2], [2,3], [2,4]],
+  '5': [[0,0],[1,0],[2,0], [0,1], [0,2],[1,2],[2,2], [2,3], [0,4],[1,4],[2,4]],
+  '6': [[2,0],[1,0],[0,0], [0,1], [0,2],[1,2],[2,2], [0,3],[2,3], [0,4],[1,4],[2,4]],
+  '7': [[0,0],[1,0],[2,0], [2,1],[1,2],[1,3],[1,4]],
+  '8': [[0,0],[1,0],[2,0], [0,1],[2,1], [1,2], [0,3],[2,3], [0,4],[1,4],[2,4]],
+  '9': [[0,0],[1,0],[2,0], [0,1],[2,1], [0,2],[1,2],[2,2], [2,3], [1,4],[0,4]]
+};
+const DIGIT_WIDTH = 3; // Based on a 3x5 grid pattern
+const DIGIT_HEIGHT = 5; // Based on a 3x5 grid pattern
+const DIGIT_SPACING = 1; // Spacing in "pixels" (actual pixels: DIGIT_SPACING * DIGIT_PIXEL_SIZE)
+
 // Terrain Generation Constants
 const SURFACE_SCALE_FACTOR = 30.0; // How "stretched" or "smooth" the terrain surface is. Larger numbers = smoother.
 const SURFACE_BASE_HEIGHT = WORLD_HEIGHT / 2; // Average height of the terrain.
@@ -702,14 +721,48 @@ try {
 
     // Draw Item in Slot (if present)
     if (player.inventory[BLOCK_TYPES.COAL_ORE] > 0) {
+      const borderWidth = 1; // Width of the border in pixels
+      const borderColor = [0, 0, 0, 1.0]; // Black, fully opaque
+
       const itemSize = BELT_SLOT_SIZE - BELT_ITEM_MARGIN * 2;
+      
+      // Calculate border properties
+      const borderSize = itemSize + borderWidth * 2;
+      const borderX = (BELT_SLOT_X + BELT_ITEM_MARGIN) - borderWidth;
+      const borderY = (BELT_SLOT_Y + BELT_ITEM_MARGIN) - borderWidth;
+
+      // Draw the border behind the item
+      gl.uniform2f(translationUniformLocation, borderX, borderY);
+      gl.uniform2f(blockSizeUniformLocation, borderSize, borderSize);
+      gl.uniform4fv(colorUniformLocation, borderColor);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Calculate item properties (as before)
       const itemX = BELT_SLOT_X + BELT_ITEM_MARGIN;
       const itemY = BELT_SLOT_Y + BELT_ITEM_MARGIN;
-
+      
+      // Draw the item on top of the border
       gl.uniform2f(translationUniformLocation, itemX, itemY);
       gl.uniform2f(blockSizeUniformLocation, itemSize, itemSize);
       gl.uniform4fv(colorUniformLocation, BLOCK_COLORS[BLOCK_TYPES.COAL_ORE]);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Display count if 2 or more
+      const coalCount = player.inventory[BLOCK_TYPES.COAL_ORE];
+      if (coalCount >= 2) {
+        const numberPixelSize = DIGIT_PIXEL_SIZE;
+        const numberColor = DIGIT_COLOR;
+        
+        const countStr = coalCount > 99 ? "99" : coalCount.toString();
+        
+        const numberWidth = (countStr.length * DIGIT_WIDTH + Math.max(0, countStr.length - 1) * DIGIT_SPACING) * numberPixelSize;
+        const numberHeight = DIGIT_HEIGHT * numberPixelSize;
+        
+        const numberX = BELT_SLOT_X + BELT_SLOT_SIZE - numberWidth - BELT_ITEM_MARGIN;
+        const numberY = BELT_SLOT_Y + BELT_SLOT_SIZE - numberHeight - BELT_ITEM_MARGIN;
+
+        drawNumber(parseInt(countStr), numberX, numberY, numberPixelSize, numberColor);
+      }
     }
     // --- End Render UI Elements ---
 
@@ -793,6 +846,36 @@ try {
     return blockAtPlayerCenter === BLOCK_TYPES.WATER;
   }
   // --- End Helper function to check if player is in water ---
+
+  // --- Digit and Number Drawing Functions ---
+  function drawDigit(digitChar, startX, startY, pixelSize, color) {
+    const pattern = DIGIT_PATTERNS[digitChar];
+    if (!pattern) return; // Character not in patterns
+
+    for (const offset of pattern) {
+      const dx = offset[0];
+      const dy = offset[1];
+
+      const px = startX + dx * pixelSize;
+      const py = startY + dy * pixelSize;
+
+      gl.uniform2f(translationUniformLocation, px, py);
+      gl.uniform2f(blockSizeUniformLocation, pixelSize, pixelSize);
+      gl.uniform4fv(colorUniformLocation, color);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+  }
+
+  function drawNumber(number, startX, startY, pixelSize, color) {
+    const numStr = number.toString();
+    let currentX = startX;
+
+    for (const digitChar of numStr) {
+      drawDigit(digitChar, currentX, startY, pixelSize, color);
+      currentX += (DIGIT_WIDTH + DIGIT_SPACING) * pixelSize;
+    }
+  }
+  // --- End Digit and Number Drawing Functions ---
 
   // --- Collision Detection and Response ---
   function handleCollisions() {
