@@ -642,7 +642,7 @@ try {
   const blockSizeUniformLocation = gl.getUniformLocation(shaderProgram, "u_blockSize");
   const colorUniformLocation = gl.getUniformLocation(shaderProgram, "u_color");
 
-  // Setup square vertices (unit square)
+  // Setup square vertices (unit square for filled blocks)
   const blockVertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, blockVertexBuffer);
   const squareVertices = [
@@ -656,6 +656,18 @@ try {
     1.0, 1.0,
   ];
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(squareVertices), gl.STATIC_DRAW);
+
+  // Setup square outline vertices (unit square for wireframe)
+  const squareOutlineVertices = [
+    0.0, 0.0,  // Bottom-left
+    1.0, 0.0,  // Bottom-right
+    1.0, 1.0,  // Top-right
+    0.0, 1.0   // Top-left
+  ];
+  let squareOutlineBuffer; // Declare, will be assigned after gl context is confirmed
+  squareOutlineBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, squareOutlineBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(squareOutlineVertices), gl.STATIC_DRAW);
 
   // --- renderWorld function ---
   function renderWorld() {
@@ -810,17 +822,32 @@ try {
       const distanceInBlocks = pixelDistance / BLOCK_SIZE_PIXELS;
 
       if (distanceInBlocks <= MAX_DIG_DISTANCE) {
+        // Bind the outline buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareOutlineBuffer);
+        // Re-affirm the attribute pointer (even if same format, good practice when switching buffers for an attribute)
+        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+        // gl.enableVertexAttribArray(positionAttributeLocation); // Should already be enabled
+
         // Calculate screen coordinates for the hovered block
         const cursorScreenX = mouseHoverGx * BLOCK_SIZE_PIXELS - camera.x;
         const cursorScreenY = mouseHoverGy * BLOCK_SIZE_PIXELS - camera.y;
         
-        const cursorColor = [1.0, 1.0, 1.0, 0.4]; // Semi-transparent white
+        const cursorColor = [1.0, 1.0, 1.0, 1.0]; // Opaque white for wireframe
 
-        // Set uniforms and draw. Assumes blockVertexBuffer is still bound and attributes enabled.
+        // Set uniforms
         gl.uniform2f(translationUniformLocation, cursorScreenX, cursorScreenY);
         gl.uniform2f(blockSizeUniformLocation, BLOCK_SIZE_PIXELS, BLOCK_SIZE_PIXELS); // Cursor is one block size
         gl.uniform4fv(colorUniformLocation, cursorColor);
-        gl.drawArrays(gl.TRIANGLES, 0, 6); 
+        
+        // Draw the outline
+        gl.drawArrays(gl.LINE_LOOP, 0, 4); // 4 vertices for LINE_LOOP
+
+        // Re-bind the original blockVertexBuffer for subsequent filled drawing operations
+        gl.bindBuffer(gl.ARRAY_BUFFER, blockVertexBuffer);
+        // If blockVertexBuffer had a different vertexAttribPointer setup, reset it here.
+        // In this case, it's the same (2 floats, 0 stride, 0 offset), so not strictly needed
+        // but for robustness:
+        // gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
       }
     }
     // --- End Render Digging Cursor ---
