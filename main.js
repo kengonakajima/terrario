@@ -605,11 +605,11 @@ try {
 
     // 4. Handle horizontal input and update horizontal position (pre-collision)
     player.velocityX = 0;
-    if (keysPressed['ArrowLeft']) {
+    if (keysPressed['ArrowLeft'] || keysPressed['KeyA']) {
       player.velocityX = -PLAYER_MOVE_SPEED;
     }
-    if (keysPressed['ArrowRight']) {
-      player.velocityX = PLAYER_MOVE_SPEED;
+    if (keysPressed['ArrowRight'] || keysPressed['KeyD']) {
+      player.velocityX = PLAYER_MOVE_SPEED; // Right input overrides left if both active
     }
     player.x += player.velocityX;
 
@@ -619,9 +619,10 @@ try {
     handleCollisions(); 
 
     // 6. Process jump input *after* collisions have been handled and isGrounded is correctly set
-    if (keysPressed['Space'] && player.isGrounded) {
+    if ((keysPressed['Space'] || keysPressed['KeyW']) && player.isGrounded) {
       player.velocityY = -JUMP_FORCE; 
-      keysPressed['Space'] = false; // Prevent continuous jump if space is held
+      if (keysPressed['Space']) keysPressed['Space'] = false;
+      if (keysPressed['KeyW']) keysPressed['KeyW'] = false;
       // player.isGrounded = false; // Optional: force isGrounded to false immediately after a jump if desired. Omitted for now.
     }
   }
