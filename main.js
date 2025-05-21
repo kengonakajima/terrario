@@ -49,6 +49,10 @@ const PLAYER_MOVE_SPEED = 3;    // pixels per frame
 const JUMP_FORCE = 10;          // initial upward velocity for a jump
 const GRAVITY = 0.5;            // pixels per frame per frame
 const MAX_FALL_SPEED = 10;      // maximum downward velocity
+const WATER_GRAVITY_MULTIPLIER = 0.4; // Player feels lighter in water
+const SWIM_UP_FORCE = 3.5; // Upward velocity applied when swimming up
+const MAX_WATER_FALL_SPEED = 2;   // Slower maximum fall speed in water
+
 
 // Terrain Generation Constants
 const SURFACE_SCALE_FACTOR = 30.0; // How "stretched" or "smooth" the terrain surface is. Larger numbers = smoother.
@@ -636,39 +640,53 @@ try {
 
   // --- Player Update Logic ---
   function updatePlayer() {
-    // 1. Assume not grounded, reset before collision checks
-    player.isGrounded = false;
+    const inWater = isPlayerInWater();
+    player.isGrounded = false; // Reset before collision checks
 
-    // 2. Apply physics: gravity
-    player.velocityY += GRAVITY;
-    if (player.velocityY > MAX_FALL_SPEED) {
-      player.velocityY = MAX_FALL_SPEED;
+    // 1. Apply Gravity (modified for water)
+    if (inWater) {
+      player.velocityY += GRAVITY * WATER_GRAVITY_MULTIPLIER;
+      if (player.velocityY > MAX_WATER_FALL_SPEED) {
+        player.velocityY = MAX_WATER_FALL_SPEED;
+      }
+    } else {
+      player.velocityY += GRAVITY;
+      if (player.velocityY > MAX_FALL_SPEED) {
+        player.velocityY = MAX_FALL_SPEED;
+      }
     }
 
-    // 3. Apply physics: update vertical position (pre-collision)
-    player.y += player.velocityY;
-
-    // 4. Handle horizontal input and update horizontal position (pre-collision)
+    // 2. Handle horizontal movement input
     player.velocityX = 0;
     if (keysPressed['ArrowLeft'] || keysPressed['KeyA']) {
-      player.velocityX = -PLAYER_MOVE_SPEED;
+      player.velocityX -= PLAYER_MOVE_SPEED; // Allows cancellation if both pressed
     }
     if (keysPressed['ArrowRight'] || keysPressed['KeyD']) {
-      player.velocityX = PLAYER_MOVE_SPEED; // Right input overrides left if both active
+      player.velocityX += PLAYER_MOVE_SPEED; // Allows cancellation if both pressed
     }
-    player.x += player.velocityX;
+    // Clamp horizontal speed if necessary, or adjust logic if direct override is preferred.
+    // For now, additive is fine. Max speed could be enforced by clamping player.velocityX here.
 
-    // 5. Handle collisions with the world
-    // This function will adjust player.x, player.y if a collision occurs,
-    // and importantly, it will set player.isGrounded = true if the player is on a surface.
+
+    // 3. Update positions based on velocity (pre-collision)
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+
+    // 4. Handle collisions with the world (sets isGrounded, adjusts x,y, velocities)
     handleCollisions(); 
 
-    // 6. Process jump input *after* collisions have been handled and isGrounded is correctly set
-    if ((keysPressed['Space'] || keysPressed['KeyW']) && player.isGrounded) {
-      player.velocityY = -JUMP_FORCE; 
-      if (keysPressed['Space']) keysPressed['Space'] = false;
-      if (keysPressed['KeyW']) keysPressed['KeyW'] = false;
-      // player.isGrounded = false; // Optional: force isGrounded to false immediately after a jump if desired. Omitted for now.
+    // 5. Handle Jump (on ground) or Swim (in water) input
+    if (inWater) {
+      if (keysPressed['Space'] || keysPressed['KeyW']) {
+        player.velocityY = -SWIM_UP_FORCE; 
+        // Not resetting keysPressed for continuous swim up.
+      }
+    } else { // Not in water - regular ground jump
+      if ((keysPressed['Space'] || keysPressed['KeyW']) && player.isGrounded) {
+        player.velocityY = -JUMP_FORCE;
+        if (keysPressed['Space']) keysPressed['Space'] = false;
+        if (keysPressed['KeyW']) keysPressed['KeyW'] = false;
+      }
     }
   }
   // --- End Player Update Logic ---
@@ -686,6 +704,17 @@ try {
     return worldGrid[gy][gx];
   }
   // --- End Helper Function ---
+
+  // --- Helper function to check if player is in water ---
+  function isPlayerInWater() {
+    const playerCenterX = player.x + player.width / 2;
+    const playerCenterY = player.y + player.height / 2;
+    
+    const blockAtPlayerCenter = getBlockFromPixelCoords(playerCenterX, playerCenterY);
+    
+    return blockAtPlayerCenter === BLOCK_TYPES.WATER;
+  }
+  // --- End Helper function to check if player is in water ---
 
   // --- Collision Detection and Response ---
   function handleCollisions() {
