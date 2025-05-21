@@ -54,6 +54,10 @@ let worldGrid = [];
 // Keyboard input state
 const keysPressed = {};
 
+// Mouse hover state
+let mouseHoverGx = -1; // Grid X of the block mouse is hovering over
+let mouseHoverGy = -1; // Grid Y of the block mouse is hovering over
+
 // Movement and Physics constants
 const PLAYER_MOVE_SPEED = 3;    // pixels per frame
 const JUMP_FORCE = 10;          // initial upward velocity for a jump
@@ -791,6 +795,36 @@ try {
     }
     // --- End Render UI Elements ---
 
+    // --- Render Digging Cursor ---
+    if (mouseHoverGx >= 0 && mouseHoverGx < WORLD_WIDTH && 
+        mouseHoverGy >= 0 && mouseHoverGy < WORLD_HEIGHT) {
+
+      const playerCenterX = player.x + player.width / 2;
+      const playerCenterY = player.y + player.height / 2;
+      const targetBlockCenterX = (mouseHoverGx + 0.5) * BLOCK_SIZE_PIXELS;
+      const targetBlockCenterY = (mouseHoverGy + 0.5) * BLOCK_SIZE_PIXELS;
+
+      const deltaX = targetBlockCenterX - playerCenterX;
+      const deltaY = targetBlockCenterY - playerCenterY;
+      const pixelDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const distanceInBlocks = pixelDistance / BLOCK_SIZE_PIXELS;
+
+      if (distanceInBlocks <= MAX_DIG_DISTANCE) {
+        // Calculate screen coordinates for the hovered block
+        const cursorScreenX = mouseHoverGx * BLOCK_SIZE_PIXELS - camera.x;
+        const cursorScreenY = mouseHoverGy * BLOCK_SIZE_PIXELS - camera.y;
+        
+        const cursorColor = [1.0, 1.0, 1.0, 0.4]; // Semi-transparent white
+
+        // Set uniforms and draw. Assumes blockVertexBuffer is still bound and attributes enabled.
+        gl.uniform2f(translationUniformLocation, cursorScreenX, cursorScreenY);
+        gl.uniform2f(blockSizeUniformLocation, BLOCK_SIZE_PIXELS, BLOCK_SIZE_PIXELS); // Cursor is one block size
+        gl.uniform4fv(colorUniformLocation, cursorColor);
+        gl.drawArrays(gl.TRIANGLES, 0, 6); 
+      }
+    }
+    // --- End Render Digging Cursor ---
+
   }
   // --- End of renderWorld function ---
 
@@ -1175,6 +1209,22 @@ try {
     }
   });
   // --- End of Block Digging ---
+
+  // --- Mouse Move Listener for Hover Tracking ---
+  canvas.addEventListener('mousemove', function(event) {
+    const rect = canvas.getBoundingClientRect();
+    const canvasMouseX = event.clientX - rect.left;
+    const canvasMouseY = event.clientY - rect.top;
+
+    const worldMouseX = canvasMouseX + camera.x;
+    const worldMouseY = canvasMouseY + camera.y;
+
+    mouseHoverGx = Math.floor(worldMouseX / BLOCK_SIZE_PIXELS);
+    mouseHoverGy = Math.floor(worldMouseY / BLOCK_SIZE_PIXELS);
+    
+    // Optional: console.log(`Mouse hover: (${mouseHoverGx}, ${mouseHoverGy})`);
+  });
+  // --- End Mouse Move Listener ---
 
   // Start the game loop
   gameLoop();
