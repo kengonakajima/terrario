@@ -62,6 +62,7 @@ const MAX_FALL_SPEED = 10;      // maximum downward velocity
 const WATER_GRAVITY_MULTIPLIER = 0.4; // Player feels lighter in water
 const SWIM_UP_FORCE = 3.5; // Upward velocity applied when swimming up
 const MAX_WATER_FALL_SPEED = 2;   // Slower maximum fall speed in water
+const MAX_DIG_DISTANCE = 4.0; // Max distance in blocks the player can dig
 
 // UI Constants
 const BELT_SLOT_SIZE = 40; // Size of the square slot
@@ -1128,24 +1129,46 @@ try {
 
     // Check if the click is within the world grid bounds
     if (gx >= 0 && gx < WORLD_WIDTH && gy >= 0 && gy < WORLD_HEIGHT) {
-      // Check if the block is not already air
-      if (worldGrid[gy][gx] !== BLOCK_TYPES.AIR) {
-        const dugBlockType = worldGrid[gy][gx]; // Store the type before changing it
-        console.log(`Digging block at: (${gx}, ${gy}) of type ${dugBlockType}`);
-        
-        if (dugBlockType === BLOCK_TYPES.COAL_ORE) {
-          player.inventory[BLOCK_TYPES.COAL_ORE]++;
-          console.log(`Collected COAL_ORE. Total: ${player.inventory[BLOCK_TYPES.COAL_ORE]}`);
-        } else if (dugBlockType === BLOCK_TYPES.DIRT) {
-          player.inventory[BLOCK_TYPES.DIRT]++;
-          console.log(`Collected DIRT. Total: ${player.inventory[BLOCK_TYPES.DIRT]}`);
-        } else if (dugBlockType === BLOCK_TYPES.STONE) {
-          player.inventory[BLOCK_TYPES.STONE]++;
-          console.log(`Collected STONE. Total: ${player.inventory[BLOCK_TYPES.STONE]}`);
+      
+      // Calculate Player Center
+      const playerCenterX = player.x + player.width / 2;
+      const playerCenterY = player.y + player.height / 2;
+
+      // Calculate Target Block Center
+      const targetBlockCenterX = (gx + 0.5) * BLOCK_SIZE_PIXELS;
+      const targetBlockCenterY = (gy + 0.5) * BLOCK_SIZE_PIXELS;
+
+      // Calculate Distance
+      const deltaX = targetBlockCenterX - playerCenterX;
+      const deltaY = targetBlockCenterY - playerCenterY;
+      const pixelDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const distanceInBlocks = pixelDistance / BLOCK_SIZE_PIXELS;
+
+      // Conditional Digging Logic based on distance
+      if (distanceInBlocks <= MAX_DIG_DISTANCE) {
+        // Check if the block is not already air
+        if (worldGrid[gy][gx] !== BLOCK_TYPES.AIR) {
+          const dugBlockType = worldGrid[gy][gx]; // Store the type before changing it
+          // Update console log to include distance
+          console.log(`Digging block at: (${gx}, ${gy}) of type ${dugBlockType}, Distance: ${distanceInBlocks.toFixed(2)} blocks.`);
+          
+          if (dugBlockType === BLOCK_TYPES.COAL_ORE) {
+            player.inventory[BLOCK_TYPES.COAL_ORE]++;
+            console.log(`Collected COAL_ORE. Total: ${player.inventory[BLOCK_TYPES.COAL_ORE]}`);
+          } else if (dugBlockType === BLOCK_TYPES.DIRT) {
+            player.inventory[BLOCK_TYPES.DIRT]++;
+            console.log(`Collected DIRT. Total: ${player.inventory[BLOCK_TYPES.DIRT]}`);
+          } else if (dugBlockType === BLOCK_TYPES.STONE) {
+            player.inventory[BLOCK_TYPES.STONE]++;
+            console.log(`Collected STONE. Total: ${player.inventory[BLOCK_TYPES.STONE]}`);
+          }
+          
+          worldGrid[gy][gx] = BLOCK_TYPES.AIR;
+          renderWorld(); // Redraw the world to show the change
         }
-        
-        worldGrid[gy][gx] = BLOCK_TYPES.AIR;
-        renderWorld(); // Redraw the world to show the change
+      } else {
+        // Optional: Log that the block is too far, for debugging.
+        console.log(`Block at (${gx}, ${gy}) is too far to dig. Distance: ${distanceInBlocks.toFixed(2)} blocks.`);
       }
     } else {
       console.log(`Clicked outside world bounds at pixel: (${event.offsetX}, ${event.offsetY}) -> grid: (${gx}, ${gy})`);
