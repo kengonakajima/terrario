@@ -1,5 +1,7 @@
 // Get the canvas element
 const canvas = document.getElementById('webgl-canvas');
+canvas.width = 800;
+canvas.height = 600;
 
 // Initialize WebGL rendering context
 let gl;
@@ -36,6 +38,27 @@ const BLOCK_COLORS = {
 
 // World grid
 let worldGrid = [];
+
+// Keyboard input state
+const keysPressed = {};
+
+// Movement and Physics constants
+const PLAYER_MOVE_SPEED = 3;    // pixels per frame
+const JUMP_FORCE = 10;          // initial upward velocity for a jump
+const GRAVITY = 0.5;            // pixels per frame per frame
+const MAX_FALL_SPEED = 10;      // maximum downward velocity
+
+// Player object
+const player = {
+  x: (WORLD_WIDTH * BLOCK_SIZE_PIXELS) / 2 - (BLOCK_SIZE_PIXELS * 0.8) / 2, // Centered, accounting for player width
+  y: Math.floor(WORLD_HEIGHT / 3) * BLOCK_SIZE_PIXELS - (BLOCK_SIZE_PIXELS * 0.8), // Start on the surface of the first dirt layer
+  width: BLOCK_SIZE_PIXELS * 0.8,
+  height: BLOCK_SIZE_PIXELS * 0.8,
+  velocityX: 0,
+  velocityY: 0,
+  isGrounded: false,
+  color: [0.2, 0.5, 1.0, 1.0] // Light blue
+};
 
 // Function to initialize the world
 function initializeWorld() {
@@ -187,8 +210,159 @@ try {
         gl.drawArrays(gl.TRIANGLES, 0, 6); // 6 vertices for the two triangles forming a square
       }
     }
+
+    // --- Render Player ---
+    // positionAttributeLocation should still be enabled and blockVertexBuffer bound
+    // vertexAttribPointer is already set up from rendering blocks
+
+    // Set player-specific uniforms
+    gl.uniform2f(translationUniformLocation, player.x, player.y);
+    gl.uniform2f(blockSizeUniformLocation, player.width, player.height);
+    gl.uniform4fv(colorUniformLocation, player.color);
+
+    // Draw the player
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    // --- End Render Player ---
+
   }
   // --- End of renderWorld function ---
+
+  // --- Player Update Logic ---
+  function updatePlayer() {
+    player.isGrounded = false; // Assume not grounded, will be set true by collision detection
+
+    // Apply Gravity
+    player.velocityY += GRAVITY;
+
+    // Cap Fall Speed
+    if (player.velocityY > MAX_FALL_SPEED) {
+      player.velocityY = MAX_FALL_SPEED;
+    }
+
+    // Horizontal movement
+    player.velocityX = 0;
+    if (keysPressed['ArrowLeft']) {
+      player.velocityX = -PLAYER_MOVE_SPEED;
+    }
+    if (keysPressed['ArrowRight']) {
+      player.velocityX = PLAYER_MOVE_SPEED;
+    }
+    player.x += player.velocityX;
+
+    // Jumping Logic
+    if (keysPressed['Space'] && player.isGrounded) {
+      player.velocityY = -JUMP_FORCE;
+      keysPressed['Space'] = false; // Prevent holding space for continuous upward force
+    }
+    
+    // Update Vertical Position
+    player.y += player.velocityY;
+
+    // Handle collisions with the world
+    handleCollisions(); 
+  }
+  // --- End Player Update Logic ---
+
+  // --- Helper function to get block type from pixel coordinates ---
+  function getBlockFromPixelCoords(pixelX, pixelY) {
+    const gx = Math.floor(pixelX / BLOCK_SIZE_PIXELS);
+    const gy = Math.floor(pixelY / BLOCK_SIZE_PIXELS);
+
+    // Boundary checks
+    if (gx < 0 || gx >= WORLD_WIDTH || gy < 0 || gy >= WORLD_HEIGHT) {
+      return BLOCK_TYPES.AIR; // Treat out-of-bounds as air (player can fall out)
+      // Alternative: return a special "SOLID_BOUNDARY" type if desired
+    }
+    return worldGrid[gy][gx];
+  }
+  // --- End Helper Function ---
+
+  // --- Collision Detection and Response ---
+  function handleCollisions() {
+    // Player's bounding box points
+    let p_left = player.x;
+    let p_right = player.x + player.width;
+    let p_top = player.y;
+    let p_bottom = player.y + player.height;
+
+    // --- Vertical Collision Detection & Response (Bottom - for landing/ground) ---
+    const mid_bottom_x = player.x + player.width / 2;
+    // Check slightly ahead for landing to prevent minor sinking before correction
+    const block_type_below = getBlockFromPixelCoords(mid_bottom_x, p_bottom + 0.1); 
+
+    if (block_type_below !== BLOCK_TYPES.AIR && player.velocityY >= 0) {
+      const block_gy_below = Math.floor(p_bottom / BLOCK_SIZE_PIXELS);
+      player.y = block_gy_below * BLOCK_SIZE_PIXELS - player.height;
+      player.velocityY = 0;
+      player.isGrounded = true;
+    }
+    // Update p_bottom and p_top after potential vertical adjustment before top collision check
+    p_top = player.y; 
+    p_bottom = player.y + player.height;
+
+
+    // --- Vertical Collision Detection & Response (Top - for hitting head) ---
+    const mid_top_x = player.x + player.width / 2;
+    const block_type_above = getBlockFromPixelCoords(mid_top_x, p_top - 0.1); // Check slightly ahead
+
+    if (block_type_above !== BLOCK_TYPES.AIR && player.velocityY < 0) {
+      const block_gy_above = Math.floor(p_top / BLOCK_SIZE_PIXELS);
+      player.y = (block_gy_above + 1) * BLOCK_SIZE_PIXELS;
+      player.velocityY = 0;
+    }
+
+    // Re-calculate player box after all vertical adjustments for horizontal checks
+    p_left = player.x; // player.x hasn't changed yet in this function
+    p_right = player.x + player.width;
+    p_top = player.y; // player.y might have changed
+    p_bottom = player.y + player.height;
+
+
+    // --- Horizontal Collision Detection & Response (Right) ---
+    const mid_right_y = player.y + player.height / 2;
+    // Check slightly ahead for side collision
+    const block_type_right = getBlockFromPixelCoords(p_right + 0.1, mid_right_y); 
+
+    if (block_type_right !== BLOCK_TYPES.AIR && player.velocityX > 0) {
+      const block_gx_right = Math.floor(p_right / BLOCK_SIZE_PIXELS);
+      player.x = block_gx_right * BLOCK_SIZE_PIXELS - player.width;
+      player.velocityX = 0;
+    }
+    // Update p_left and p_right after potential horizontal adjustment before left collision check
+    p_left = player.x;
+    p_right = player.x + player.width;
+
+
+    // --- Horizontal Collision Detection & Response (Left) ---
+    const mid_left_y = player.y + player.height / 2;
+    const block_type_left = getBlockFromPixelCoords(p_left - 0.1, mid_left_y); // Check slightly ahead
+
+    if (block_type_left !== BLOCK_TYPES.AIR && player.velocityX < 0) {
+      const block_gx_left = Math.floor(p_left / BLOCK_SIZE_PIXELS);
+      player.x = (block_gx_left + 1) * BLOCK_SIZE_PIXELS;
+      player.velocityX = 0;
+    }
+  }
+  // --- End Collision Detection and Response ---
+
+  // --- Game Loop ---
+  function gameLoop() {
+    updatePlayer(); // Update player state based on input and physics
+
+    renderWorld(); // Renders both world and player
+    requestAnimationFrame(gameLoop);
+  }
+  // --- End Game Loop ---
+
+  // --- Event Listeners for Keyboard Input ---
+  window.addEventListener('keydown', function(event) {
+    keysPressed[event.code] = true;
+  });
+
+  window.addEventListener('keyup', function(event) {
+    keysPressed[event.code] = false;
+  });
+  // --- End Event Listeners ---
 
   // --- Block Digging ---
 
@@ -222,8 +396,8 @@ try {
   });
   // --- End of Block Digging ---
 
-  // Initial render
-  renderWorld();
+  // Start the game loop
+  gameLoop();
 
 } catch (error) {
   console.error(error);
