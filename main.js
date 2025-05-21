@@ -65,9 +65,26 @@ const MAX_WATER_FALL_SPEED = 2;   // Slower maximum fall speed in water
 
 // UI Constants
 const BELT_SLOT_SIZE = 40; // Size of the square slot
-const BELT_SLOT_X = (canvas.width / 2) - (BELT_SLOT_SIZE / 2); // Centered horizontally
 const BELT_SLOT_Y = canvas.height - BELT_SLOT_SIZE - 10; // Near bottom, 10px padding
 const BELT_ITEM_MARGIN = 4; // Margin for the item inside the slot
+const BELT_SLOT_COUNT = 9;
+const BELT_SLOT_SPACING = 4; // Pixels between slots
+
+// Total width of all slots and spacing between them
+const TOTAL_BELT_WIDTH = (BELT_SLOT_COUNT * BELT_SLOT_SIZE) + ((BELT_SLOT_COUNT - 1) * BELT_SLOT_SPACING);
+const BELT_START_X = (canvas.width / 2) - (TOTAL_BELT_WIDTH / 2);
+
+const BELT_SLOT_ITEMS = [
+  BLOCK_TYPES.COAL_ORE, // Slot 0
+  BLOCK_TYPES.DIRT,     // Slot 1
+  BLOCK_TYPES.STONE,    // Slot 2
+  null, // Slot 3 (empty)
+  null, // Slot 4
+  null, // Slot 5
+  null, // Slot 6
+  null, // Slot 7
+  null  // Slot 8
+];
 
 // Digit Rendering Constants
 const DIGIT_PIXEL_SIZE = 2; // How big each "pixel" of the digit is
@@ -113,7 +130,9 @@ const player = {
   isGrounded: false,
   color: [0.2, 0.5, 1.0, 1.0], // Light blue
   inventory: {
-    [BLOCK_TYPES.COAL_ORE]: 0
+    [BLOCK_TYPES.COAL_ORE]: 0,
+    [BLOCK_TYPES.DIRT]: 0,
+    [BLOCK_TYPES.STONE]: 0
   }
 };
 
@@ -713,59 +732,61 @@ try {
     // gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
     // u_resolution is already set correctly for screen space
 
-    // Draw Slot Background
-    gl.uniform2f(translationUniformLocation, BELT_SLOT_X, BELT_SLOT_Y);
-    gl.uniform2f(blockSizeUniformLocation, BELT_SLOT_SIZE, BELT_SLOT_SIZE);
-    gl.uniform4fv(colorUniformLocation, [0.2, 0.2, 0.2, 0.7]); // Semi-transparent dark grey
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    // Draw Item in Slot (if present)
-    if (player.inventory[BLOCK_TYPES.COAL_ORE] > 0) {
-      const borderWidth = 1; // Width of the border in pixels
-      const borderColor = [0, 0, 0, 1.0]; // Black, fully opaque
-
-      const itemSize = BELT_SLOT_SIZE - BELT_ITEM_MARGIN * 2;
-      
-      // Calculate border properties
-      const borderSize = itemSize + borderWidth * 2;
-      const borderX = (BELT_SLOT_X + BELT_ITEM_MARGIN) - borderWidth;
-      const borderY = (BELT_SLOT_Y + BELT_ITEM_MARGIN) - borderWidth;
-
-      // Draw the border behind the item
-      gl.uniform2f(translationUniformLocation, borderX, borderY);
-      gl.uniform2f(blockSizeUniformLocation, borderSize, borderSize);
-      gl.uniform4fv(colorUniformLocation, borderColor);
+    // Loop to Draw Slot Backgrounds
+    let currentSlotX = BELT_START_X;
+    for (let i = 0; i < BELT_SLOT_COUNT; i++) {
+      // Draw Slot Background for slot i
+      gl.uniform2f(translationUniformLocation, currentSlotX, BELT_SLOT_Y); // BELT_SLOT_Y is constant for all
+      gl.uniform2f(blockSizeUniformLocation, BELT_SLOT_SIZE, BELT_SLOT_SIZE);
+      gl.uniform4fv(colorUniformLocation, [0.2, 0.2, 0.2, 0.7]); // Slot background color
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-      // Calculate item properties (as before)
-      const itemX = BELT_SLOT_X + BELT_ITEM_MARGIN;
-      const itemY = BELT_SLOT_Y + BELT_ITEM_MARGIN;
-      
-      // Draw the item on top of the border
-      gl.uniform2f(translationUniformLocation, itemX, itemY);
-      gl.uniform2f(blockSizeUniformLocation, itemSize, itemSize);
-      gl.uniform4fv(colorUniformLocation, BLOCK_COLORS[BLOCK_TYPES.COAL_ORE]);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      // --- Draw Item and Count in Slot ---
+      const itemType = BELT_SLOT_ITEMS[i];
+      if (itemType !== null) {
+        const itemCount = player.inventory[itemType] || 0; // Default to 0 if not in inventory
+        if (itemCount > 0) {
+          // Draw Item Visual (with Border)
+          const borderWidth = 1;
+          const borderColor = [0, 0, 0, 1.0]; // Black, opaque
+          const itemSize = BELT_SLOT_SIZE - BELT_ITEM_MARGIN * 2;
+          
+          const borderSize = itemSize + borderWidth * 2;
+          const itemBorderX = (currentSlotX + BELT_ITEM_MARGIN) - borderWidth;
+          const itemBorderY = (BELT_SLOT_Y + BELT_ITEM_MARGIN) - borderWidth;
 
-      // Display count if 2 or more
-      const coalCount = player.inventory[BLOCK_TYPES.COAL_ORE]; // Original line
-      if (coalCount >= 2) { // Original condition restored
-        
-        const numberPixelSize = DIGIT_PIXEL_SIZE;
-        const numberColor = DIGIT_COLOR;
-        
-        // const countStr = "12"; // <<<< FORCE "12" FOR TESTING - REMOVED
-        const countStr = coalCount > 99 ? "99" : coalCount.toString(); // Original logic restored
-        
-        const numberWidth = (countStr.length * DIGIT_WIDTH + Math.max(0, countStr.length - 1) * DIGIT_SPACING) * numberPixelSize;
-        const numberHeight = DIGIT_HEIGHT * numberPixelSize;
-        
-        const numberX = BELT_SLOT_X + BELT_SLOT_SIZE - numberWidth - BELT_ITEM_MARGIN;
-        const numberY = BELT_SLOT_Y + BELT_SLOT_SIZE - numberHeight - BELT_ITEM_MARGIN;
+          gl.uniform2f(translationUniformLocation, itemBorderX, itemBorderY);
+          gl.uniform2f(blockSizeUniformLocation, borderSize, borderSize);
+          gl.uniform4fv(colorUniformLocation, borderColor);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // console.log(`Forcing drawNumber: val=${parseInt(countStr)}, x=${numberX}, y=${numberY}, psize=${numberPixelSize}`); // REMOVED
-        drawNumber(parseInt(countStr), numberX, numberY, numberPixelSize, numberColor);
-      } // Original condition restored
+          const itemX = currentSlotX + BELT_ITEM_MARGIN;
+          const itemY = BELT_SLOT_Y + BELT_ITEM_MARGIN;
+
+          gl.uniform2f(translationUniformLocation, itemX, itemY);
+          gl.uniform2f(blockSizeUniformLocation, itemSize, itemSize);
+          gl.uniform4fv(colorUniformLocation, BLOCK_COLORS[itemType]);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+          // Display Count (if >= 2)
+          if (itemCount >= 2) {
+            const numberPixelSize = DIGIT_PIXEL_SIZE;
+            const numberColor = DIGIT_COLOR;
+            const countStr = itemCount > 99 ? "99" : itemCount.toString();
+            
+            const numberWidth = (countStr.length * DIGIT_WIDTH + Math.max(0, countStr.length - 1) * DIGIT_SPACING) * numberPixelSize;
+            const numberHeight = DIGIT_HEIGHT * numberPixelSize;
+            
+            const numberX = currentSlotX + BELT_SLOT_SIZE - numberWidth - BELT_ITEM_MARGIN;
+            const numberY = BELT_SLOT_Y + BELT_SLOT_SIZE - numberHeight - BELT_ITEM_MARGIN;
+
+            drawNumber(parseInt(countStr), numberX, numberY, numberPixelSize, numberColor);
+          }
+        }
+      }
+      // --- End Draw Item and Count in Slot ---
+
+      currentSlotX += BELT_SLOT_SIZE + BELT_SLOT_SPACING; // Advance x for the next slot
     }
     // --- End Render UI Elements ---
 
@@ -1109,12 +1130,18 @@ try {
     if (gx >= 0 && gx < WORLD_WIDTH && gy >= 0 && gy < WORLD_HEIGHT) {
       // Check if the block is not already air
       if (worldGrid[gy][gx] !== BLOCK_TYPES.AIR) {
-        console.log(`Digging block at: (${gx}, ${gy}) of type ${worldGrid[gy][gx]}`);
+        const dugBlockType = worldGrid[gy][gx]; // Store the type before changing it
+        console.log(`Digging block at: (${gx}, ${gy}) of type ${dugBlockType}`);
         
-        // Check if the block being dug is COAL_ORE
-        if (worldGrid[gy][gx] === BLOCK_TYPES.COAL_ORE) {
+        if (dugBlockType === BLOCK_TYPES.COAL_ORE) {
           player.inventory[BLOCK_TYPES.COAL_ORE]++;
           console.log(`Collected COAL_ORE. Total: ${player.inventory[BLOCK_TYPES.COAL_ORE]}`);
+        } else if (dugBlockType === BLOCK_TYPES.DIRT) {
+          player.inventory[BLOCK_TYPES.DIRT]++;
+          console.log(`Collected DIRT. Total: ${player.inventory[BLOCK_TYPES.DIRT]}`);
+        } else if (dugBlockType === BLOCK_TYPES.STONE) {
+          player.inventory[BLOCK_TYPES.STONE]++;
+          console.log(`Collected STONE. Total: ${player.inventory[BLOCK_TYPES.STONE]}`);
         }
         
         worldGrid[gy][gx] = BLOCK_TYPES.AIR;
