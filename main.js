@@ -748,12 +748,14 @@ try {
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
       // Display count if 2 or more
-      const coalCount = player.inventory[BLOCK_TYPES.COAL_ORE];
-      if (coalCount >= 2) {
+      const coalCount = player.inventory[BLOCK_TYPES.COAL_ORE]; // Original line
+      if (coalCount >= 2) { // Original condition restored
+        
         const numberPixelSize = DIGIT_PIXEL_SIZE;
         const numberColor = DIGIT_COLOR;
         
-        const countStr = coalCount > 99 ? "99" : coalCount.toString();
+        // const countStr = "12"; // <<<< FORCE "12" FOR TESTING - REMOVED
+        const countStr = coalCount > 99 ? "99" : coalCount.toString(); // Original logic restored
         
         const numberWidth = (countStr.length * DIGIT_WIDTH + Math.max(0, countStr.length - 1) * DIGIT_SPACING) * numberPixelSize;
         const numberHeight = DIGIT_HEIGHT * numberPixelSize;
@@ -761,8 +763,9 @@ try {
         const numberX = BELT_SLOT_X + BELT_SLOT_SIZE - numberWidth - BELT_ITEM_MARGIN;
         const numberY = BELT_SLOT_Y + BELT_SLOT_SIZE - numberHeight - BELT_ITEM_MARGIN;
 
+        // console.log(`Forcing drawNumber: val=${parseInt(countStr)}, x=${numberX}, y=${numberY}, psize=${numberPixelSize}`); // REMOVED
         drawNumber(parseInt(countStr), numberX, numberY, numberPixelSize, numberColor);
-      }
+      } // Original condition restored
     }
     // --- End Render UI Elements ---
 
