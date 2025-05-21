@@ -229,17 +229,19 @@ try {
 
   // --- Player Update Logic ---
   function updatePlayer() {
-    player.isGrounded = false; // Assume not grounded, will be set true by collision detection
+    // 1. Assume not grounded, reset before collision checks
+    player.isGrounded = false;
 
-    // Apply Gravity
+    // 2. Apply physics: gravity
     player.velocityY += GRAVITY;
-
-    // Cap Fall Speed
     if (player.velocityY > MAX_FALL_SPEED) {
       player.velocityY = MAX_FALL_SPEED;
     }
 
-    // Horizontal movement
+    // 3. Apply physics: update vertical position (pre-collision)
+    player.y += player.velocityY;
+
+    // 4. Handle horizontal input and update horizontal position (pre-collision)
     player.velocityX = 0;
     if (keysPressed['ArrowLeft']) {
       player.velocityX = -PLAYER_MOVE_SPEED;
@@ -249,17 +251,17 @@ try {
     }
     player.x += player.velocityX;
 
-    // Jumping Logic
-    if (keysPressed['Space'] && player.isGrounded) {
-      player.velocityY = -JUMP_FORCE;
-      keysPressed['Space'] = false; // Prevent holding space for continuous upward force
-    }
-    
-    // Update Vertical Position
-    player.y += player.velocityY;
-
-    // Handle collisions with the world
+    // 5. Handle collisions with the world
+    // This function will adjust player.x, player.y if a collision occurs,
+    // and importantly, it will set player.isGrounded = true if the player is on a surface.
     handleCollisions(); 
+
+    // 6. Process jump input *after* collisions have been handled and isGrounded is correctly set
+    if (keysPressed['Space'] && player.isGrounded) {
+      player.velocityY = -JUMP_FORCE; 
+      keysPressed['Space'] = false; // Prevent continuous jump if space is held
+      // player.isGrounded = false; // Optional: force isGrounded to false immediately after a jump if desired. Omitted for now.
+    }
   }
   // --- End Player Update Logic ---
 
