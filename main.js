@@ -35,7 +35,8 @@ const BLOCK_TYPES = {
   DIRT: 1,
   STONE: 2,
   WATER: 3, // New water block type
-  // GRASS: 4, // Example for future expansion
+  COAL_ORE: 4, // New coal ore block type
+  // GRASS: 5, // Example for future expansion
 };
 
 const BLOCK_COLORS = {
@@ -43,6 +44,7 @@ const BLOCK_COLORS = {
   [BLOCK_TYPES.DIRT]: [0.5, 0.25, 0.15, 1.0], // Brown color for dirt
   [BLOCK_TYPES.STONE]: [0.5, 0.5, 0.5, 1.0], // Grey color for stone
   [BLOCK_TYPES.WATER]: [0.2, 0.5, 1.0, 0.7], // Semi-transparent blue for water
+  [BLOCK_TYPES.COAL_ORE]: [0.3, 0.3, 0.3, 1.0], // Dark grey for coal ore
   // [BLOCK_TYPES.GRASS]: [0.0, 0.8, 0.0, 1.0],
 };
 
@@ -61,6 +63,11 @@ const WATER_GRAVITY_MULTIPLIER = 0.4; // Player feels lighter in water
 const SWIM_UP_FORCE = 3.5; // Upward velocity applied when swimming up
 const MAX_WATER_FALL_SPEED = 2;   // Slower maximum fall speed in water
 
+// UI Constants
+const BELT_SLOT_SIZE = 40; // Size of the square slot
+const BELT_SLOT_X = (canvas.width / 2) - (BELT_SLOT_SIZE / 2); // Centered horizontally
+const BELT_SLOT_Y = canvas.height - BELT_SLOT_SIZE - 10; // Near bottom, 10px padding
+const BELT_ITEM_MARGIN = 4; // Margin for the item inside the slot
 
 // Terrain Generation Constants
 const SURFACE_SCALE_FACTOR = 30.0; // How "stretched" or "smooth" the terrain surface is. Larger numbers = smoother.
@@ -73,6 +80,9 @@ const SURFACE_NOISE_SEED_Y = 0.5; // A fixed Y value for the 2D noise to get 1D-
 const CAVE_SCALE_FACTOR = 15.0; // Smaller scale for more detailed cave patterns.
 const CAVE_THRESHOLD = 0.6;    // Noise values above this become caves. Range is [-1, 1], so 0.6 means rarer.
 
+// Ore Generation Constant
+const COAL_ORE_CHANCE = 0.05; // 5% chance for a stone block to be coal ore
+
 // Player object
 const player = {
   x: (WORLD_WIDTH * BLOCK_SIZE_PIXELS) / 2 - (BLOCK_SIZE_PIXELS * 0.8) / 2, // Centered, accounting for player width
@@ -82,7 +92,10 @@ const player = {
   velocityX: 0,
   velocityY: 0,
   isGrounded: false,
-  color: [0.2, 0.5, 1.0, 1.0] // Light blue
+  color: [0.2, 0.5, 1.0, 1.0], // Light blue
+  inventory: {
+    [BLOCK_TYPES.COAL_ORE]: 0
+  }
 };
 
 // --- Simplex Noise Start ---
@@ -451,6 +464,18 @@ function initializeWorld() {
   }
   // --- End Cave Generation ---
 
+  // --- Ore Generation ---
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      if (worldGrid[y][x] === BLOCK_TYPES.STONE) {
+        if (Math.random() < COAL_ORE_CHANCE) {
+          worldGrid[y][x] = BLOCK_TYPES.COAL_ORE;
+        }
+      }
+    }
+  }
+  // --- End Ore Generation ---
+
   // --- Pond Generation (Simplified from prompt) ---
   const POND_CHANCE = 0.05; // Chance to attempt pond creation at a column
   const POND_WIDTH = 5;    // Max width of the pond
@@ -490,7 +515,7 @@ function initializeWorld() {
   }
   // --- End Pond Generation ---
 
-  console.log("World initialized with noise-based terrain, caves, and ponds."); // For debugging
+  console.log("World initialized with noise-based terrain, caves, ores, and ponds."); // For debugging
 }
 
 // Vertex Shader source code
@@ -661,6 +686,32 @@ try {
     // Draw the player
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     // --- End Render Player ---
+
+    // --- Render UI Elements (Fixed Position, Not Affected by Camera) ---
+    // Ensure vertex attributes are still set up (they should be from player/world rendering)
+    // gl.enableVertexAttribArray(positionAttributeLocation);
+    // gl.bindBuffer(gl.ARRAY_BUFFER, blockVertexBuffer);
+    // gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+    // u_resolution is already set correctly for screen space
+
+    // Draw Slot Background
+    gl.uniform2f(translationUniformLocation, BELT_SLOT_X, BELT_SLOT_Y);
+    gl.uniform2f(blockSizeUniformLocation, BELT_SLOT_SIZE, BELT_SLOT_SIZE);
+    gl.uniform4fv(colorUniformLocation, [0.2, 0.2, 0.2, 0.7]); // Semi-transparent dark grey
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // Draw Item in Slot (if present)
+    if (player.inventory[BLOCK_TYPES.COAL_ORE] > 0) {
+      const itemSize = BELT_SLOT_SIZE - BELT_ITEM_MARGIN * 2;
+      const itemX = BELT_SLOT_X + BELT_ITEM_MARGIN;
+      const itemY = BELT_SLOT_Y + BELT_ITEM_MARGIN;
+
+      gl.uniform2f(translationUniformLocation, itemX, itemY);
+      gl.uniform2f(blockSizeUniformLocation, itemSize, itemSize);
+      gl.uniform4fv(colorUniformLocation, BLOCK_COLORS[BLOCK_TYPES.COAL_ORE]);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    // --- End Render UI Elements ---
 
   }
   // --- End of renderWorld function ---
@@ -972,7 +1023,14 @@ try {
     if (gx >= 0 && gx < WORLD_WIDTH && gy >= 0 && gy < WORLD_HEIGHT) {
       // Check if the block is not already air
       if (worldGrid[gy][gx] !== BLOCK_TYPES.AIR) {
-        console.log(`Digging block at: (${gx}, ${gy})`);
+        console.log(`Digging block at: (${gx}, ${gy}) of type ${worldGrid[gy][gx]}`);
+        
+        // Check if the block being dug is COAL_ORE
+        if (worldGrid[gy][gx] === BLOCK_TYPES.COAL_ORE) {
+          player.inventory[BLOCK_TYPES.COAL_ORE]++;
+          console.log(`Collected COAL_ORE. Total: ${player.inventory[BLOCK_TYPES.COAL_ORE]}`);
+        }
+        
         worldGrid[gy][gx] = BLOCK_TYPES.AIR;
         renderWorld(); // Redraw the world to show the change
       }
