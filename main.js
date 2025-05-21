@@ -26,13 +26,15 @@ const BLOCK_TYPES = {
   AIR: 0,
   DIRT: 1,
   STONE: 2,
-  // GRASS: 3, // Example for future expansion
+  WATER: 3, // New water block type
+  // GRASS: 4, // Example for future expansion
 };
 
 const BLOCK_COLORS = {
   [BLOCK_TYPES.AIR]: [0.0, 0.0, 0.0, 0.0], // Fully transparent
   [BLOCK_TYPES.DIRT]: [0.5, 0.25, 0.15, 1.0], // Brown color for dirt
   [BLOCK_TYPES.STONE]: [0.5, 0.5, 0.5, 1.0], // Grey color for stone
+  [BLOCK_TYPES.WATER]: [0.2, 0.5, 1.0, 0.7], // Semi-transparent blue for water
   // [BLOCK_TYPES.GRASS]: [0.0, 0.8, 0.0, 1.0],
 };
 
@@ -437,7 +439,46 @@ function initializeWorld() {
   }
   // --- End Cave Generation ---
 
-  console.log("World initialized with noise-based terrain and caves."); // For debugging
+  // --- Pond Generation (Simplified from prompt) ---
+  const POND_CHANCE = 0.05; // Chance to attempt pond creation at a column
+  const POND_WIDTH = 5;    // Max width of the pond
+  const POND_DEPTH = 3;    // Max depth of the pond
+
+  for (let x_pond_center = 0; x_pond_center < WORLD_WIDTH; x_pond_center++) {
+    if (Math.random() < POND_CHANCE) {
+      // Find the surface Y at this column's center (top of DIRT/STONE)
+      let surfaceY_at_center = 0;
+      for (let y_scan = 0; y_scan < WORLD_HEIGHT; y_scan++) {
+        if (worldGrid[y_scan][x_pond_center] !== BLOCK_TYPES.AIR) {
+          surfaceY_at_center = y_scan;
+          break;
+        }
+      }
+
+      // If there's space above ground (surfaceY_at_center > 0)
+      if (surfaceY_at_center > 0) {
+        // Potential pond starts at (x_pond_center, surfaceY_at_center - 1) and goes up
+        for (let py = surfaceY_at_center - 1; py >= Math.max(0, surfaceY_at_center - POND_DEPTH); py--) {
+          for (let px = Math.max(0, x_pond_center - Math.floor(POND_WIDTH / 2)); px < Math.min(WORLD_WIDTH, x_pond_center + Math.ceil(POND_WIDTH / 2)); px++) {
+            // Check if the block to fill is currently AIR
+            if (worldGrid[py][px] === BLOCK_TYPES.AIR) {
+              // Ensure there's ground or existing water below it to hold the new water block
+              // Also check that the block at (py+1, px) is within world bounds.
+              if (py + 1 < WORLD_HEIGHT && (
+                  worldGrid[py+1][px] === BLOCK_TYPES.DIRT ||
+                  worldGrid[py+1][px] === BLOCK_TYPES.STONE ||
+                  worldGrid[py+1][px] === BLOCK_TYPES.WATER )) {
+                   worldGrid[py][px] = BLOCK_TYPES.WATER;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // --- End Pond Generation ---
+
+  console.log("World initialized with noise-based terrain, caves, and ponds."); // For debugging
 }
 
 // Vertex Shader source code
@@ -509,6 +550,10 @@ try {
   const fragmentShader = compileShader(gl, fsSource, gl.FRAGMENT_SHADER);
   const shaderProgram = linkProgram(gl, vertexShader, fragmentShader);
   gl.useProgram(shaderProgram);
+
+  // Enable blending for transparency
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
   // Get attribute and uniform locations
   const positionAttributeLocation = gl.getAttribLocation(shaderProgram, "a_position");
@@ -655,7 +700,7 @@ try {
     // Check slightly ahead for landing to prevent minor sinking before correction
     const block_type_below = getBlockFromPixelCoords(mid_bottom_x, p_bottom + 0.1); 
 
-    if (block_type_below !== BLOCK_TYPES.AIR && player.velocityY >= 0) {
+    if (block_type_below !== BLOCK_TYPES.AIR && block_type_below !== BLOCK_TYPES.WATER && player.velocityY >= 0) {
       const block_gy_below = Math.floor(p_bottom / BLOCK_SIZE_PIXELS);
       player.y = block_gy_below * BLOCK_SIZE_PIXELS - player.height;
       player.velocityY = 0;
@@ -670,7 +715,7 @@ try {
     const mid_top_x = player.x + player.width / 2;
     const block_type_above = getBlockFromPixelCoords(mid_top_x, p_top - 0.1); // Check slightly ahead
 
-    if (block_type_above !== BLOCK_TYPES.AIR && player.velocityY < 0) {
+    if (block_type_above !== BLOCK_TYPES.AIR && block_type_above !== BLOCK_TYPES.WATER && player.velocityY < 0) {
       const block_gy_above = Math.floor(p_top / BLOCK_SIZE_PIXELS);
       player.y = (block_gy_above + 1) * BLOCK_SIZE_PIXELS;
       player.velocityY = 0;
@@ -688,7 +733,7 @@ try {
     // Check slightly ahead for side collision
     const block_type_right = getBlockFromPixelCoords(p_right + 0.1, mid_right_y); 
 
-    if (block_type_right !== BLOCK_TYPES.AIR && player.velocityX > 0) {
+    if (block_type_right !== BLOCK_TYPES.AIR && block_type_right !== BLOCK_TYPES.WATER && player.velocityX > 0) {
       const block_gx_right = Math.floor(p_right / BLOCK_SIZE_PIXELS);
       player.x = block_gx_right * BLOCK_SIZE_PIXELS - player.width;
       player.velocityX = 0;
@@ -702,7 +747,7 @@ try {
     const mid_left_y = player.y + player.height / 2;
     const block_type_left = getBlockFromPixelCoords(p_left - 0.1, mid_left_y); // Check slightly ahead
 
-    if (block_type_left !== BLOCK_TYPES.AIR && player.velocityX < 0) {
+    if (block_type_left !== BLOCK_TYPES.AIR && block_type_left !== BLOCK_TYPES.WATER && player.velocityX < 0) {
       const block_gx_left = Math.floor(p_left / BLOCK_SIZE_PIXELS);
       player.x = (block_gx_left + 1) * BLOCK_SIZE_PIXELS;
       player.velocityX = 0;
@@ -710,10 +755,110 @@ try {
   }
   // --- End Collision Detection and Response ---
 
+  // --- Water Physics Update ---
+
+  function processWaterBlock(x, y) {
+    if (worldGrid[y][x] === BLOCK_TYPES.WATER) {
+      // 1. Try to flow down
+      if (y + 1 < WORLD_HEIGHT && worldGrid[y+1][x] === BLOCK_TYPES.AIR) {
+        worldGrid[y+1][x] = BLOCK_TYPES.WATER;
+        worldGrid[y][x] = BLOCK_TYPES.AIR;
+        return; // Block moved down, process next block
+      }
+
+      // 2. If no downward flow, try to flow sideways
+      // Randomly choose a side to check first to avoid bias if both sides are open
+      let checkLeftFirst = Math.random() < 0.5;
+
+      if (checkLeftFirst) {
+        // Try left (slope flow)
+        if (x - 1 >= 0 && worldGrid[y][x-1] === BLOCK_TYPES.AIR) {
+          if (y + 1 < WORLD_HEIGHT && worldGrid[y+1][x-1] === BLOCK_TYPES.AIR) {
+              worldGrid[y][x-1] = BLOCK_TYPES.WATER;
+              worldGrid[y][x] = BLOCK_TYPES.AIR;
+              return; // Block moved left
+          }
+        }
+        // Then try right (slope flow)
+        if (x + 1 < WORLD_WIDTH && worldGrid[y][x+1] === BLOCK_TYPES.AIR) {
+           if (y + 1 < WORLD_HEIGHT && worldGrid[y+1][x+1] === BLOCK_TYPES.AIR) {
+              worldGrid[y][x+1] = BLOCK_TYPES.WATER;
+              worldGrid[y][x] = BLOCK_TYPES.AIR;
+              return; // Block moved right
+          }
+        }
+      } else { // Check right first (slope flow)
+        // Try right
+        if (x + 1 < WORLD_WIDTH && worldGrid[y][x+1] === BLOCK_TYPES.AIR) {
+          if (y + 1 < WORLD_HEIGHT && worldGrid[y+1][x+1] === BLOCK_TYPES.AIR) {
+              worldGrid[y][x+1] = BLOCK_TYPES.WATER;
+              worldGrid[y][x] = BLOCK_TYPES.AIR;
+              return; // Block moved right
+          }
+        }
+        // Then try left (slope flow)
+        if (x - 1 >= 0 && worldGrid[y][x-1] === BLOCK_TYPES.AIR) {
+          if (y + 1 < WORLD_HEIGHT && worldGrid[y+1][x-1] === BLOCK_TYPES.AIR) {
+              worldGrid[y][x-1] = BLOCK_TYPES.WATER;
+              worldGrid[y][x] = BLOCK_TYPES.AIR;
+              return; // Block moved left
+          }
+        }
+      }
+
+      // 3. If no slope flow, try leveling flow
+      // (Order doesn't matter as much here as it's an 'else if' type of condition for the remaining logic)
+      if (checkLeftFirst) { 
+          // Try left (leveling)
+          if (x - 1 >= 0 && worldGrid[y][x-1] === BLOCK_TYPES.AIR) { 
+              worldGrid[y][x-1] = BLOCK_TYPES.WATER;
+              worldGrid[y][x] = BLOCK_TYPES.AIR;
+              return; 
+          }
+          // Then try right (leveling, if not moved left)
+          if (x + 1 < WORLD_WIDTH && worldGrid[y][x+1] === BLOCK_TYPES.AIR) {
+             worldGrid[y][x+1] = BLOCK_TYPES.WATER;
+             worldGrid[y][x] = BLOCK_TYPES.AIR;
+             return;
+         }
+      } else { // Check right first (leveling)
+          // Try right
+          if (x + 1 < WORLD_WIDTH && worldGrid[y][x+1] === BLOCK_TYPES.AIR) {
+             worldGrid[y][x+1] = BLOCK_TYPES.WATER;
+             worldGrid[y][x] = BLOCK_TYPES.AIR;
+             return;
+         }
+          // Then try left (leveling, if not moved right)
+          if (x - 1 >= 0 && worldGrid[y][x-1] === BLOCK_TYPES.AIR) {
+             worldGrid[y][x-1] = BLOCK_TYPES.WATER;
+             worldGrid[y][x] = BLOCK_TYPES.AIR;
+             return; 
+         }
+      }
+    }
+  }
+
+  function updateWater() {
+    // Iterate from second to last row upwards, and alternate x-direction for somewhat stabler sideways spread
+    for (let y = WORLD_HEIGHT - 2; y >= 0; y--) {
+      // Alternate x-direction for each row to help with spread dynamics
+      if (y % 2 === 0) { // Even rows: left-to-right
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+          processWaterBlock(x, y);
+        }
+      } else { // Odd rows: right-to-left
+        for (let x = WORLD_WIDTH - 1; x >= 0; x--) {
+          processWaterBlock(x, y);
+        }
+      }
+    }
+  }
+  // --- End Water Physics Update ---
+
   // --- Game Loop ---
   function gameLoop() {
     updatePlayer(); // Update player state based on input and physics
-
+    updateWater();  // Update water physics
     renderWorld(); // Renders both world and player
     requestAnimationFrame(gameLoop);
   }
