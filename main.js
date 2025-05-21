@@ -3,6 +3,14 @@ const canvas = document.getElementById('webgl-canvas');
 canvas.width = 800;
 canvas.height = 600;
 
+// Camera object
+const camera = {
+  x: 0,
+  y: 0,
+  width: canvas.width,
+  height: canvas.height
+};
+
 // Initialize WebGL rendering context
 let gl;
 try {
@@ -17,8 +25,8 @@ if (!gl) {
 }
 
 // World representation constants
-const WORLD_WIDTH = 50; // blocks
-const WORLD_HEIGHT = 30; // blocks
+const WORLD_WIDTH = 256; // blocks
+const WORLD_HEIGHT = 128; // blocks
 const BLOCK_SIZE_PIXELS = 20;
 
 // Block types mapping
@@ -586,6 +594,16 @@ try {
     gl.clearColor(0.0, 0.0, 0.0, 1.0); // Black, fully opaque
     gl.clear(gl.COLOR_BUFFER_BIT);
 
+    // Calculate the visible range of blocks
+    let startCol = Math.floor(camera.x / BLOCK_SIZE_PIXELS);
+    let endCol = Math.min(startCol + Math.ceil(camera.width / BLOCK_SIZE_PIXELS) + 1, WORLD_WIDTH);
+    let startRow = Math.floor(camera.y / BLOCK_SIZE_PIXELS);
+    let endRow = Math.min(startRow + Math.ceil(camera.height / BLOCK_SIZE_PIXELS) + 1, WORLD_HEIGHT);
+
+    // Clamp to world boundaries (ensure they don't go negative)
+    startCol = Math.max(0, startCol);
+    startRow = Math.max(0, startRow);
+
     // Enable the attribute
     gl.enableVertexAttribArray(positionAttributeLocation);
     // Bind the position buffer.
@@ -600,35 +618,44 @@ try {
         0           // 0 = start at the beginning of the buffer
     );
 
-    // Set global uniforms that don't change per block
+    // Set global uniforms that don't change per block (or player, unless overridden)
     gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
-    gl.uniform2f(blockSizeUniformLocation, BLOCK_SIZE_PIXELS, BLOCK_SIZE_PIXELS);
+    
+    // --- Render World Blocks ---
+    gl.uniform2f(blockSizeUniformLocation, BLOCK_SIZE_PIXELS, BLOCK_SIZE_PIXELS); // Set for blocks
 
-    for (let y = 0; y < WORLD_HEIGHT; y++) {
-      for (let x = 0; x < WORLD_WIDTH; x++) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
         const blockType = worldGrid[y][x];
 
         if (blockType === BLOCK_TYPES.AIR) {
           continue; // Don't draw air blocks
         }
 
-        const blockX = x * BLOCK_SIZE_PIXELS;
-        const blockY = y * BLOCK_SIZE_PIXELS;
+        const blockWorldX = x * BLOCK_SIZE_PIXELS;
+        const blockWorldY = y * BLOCK_SIZE_PIXELS;
 
-        gl.uniform2f(translationUniformLocation, blockX, blockY);
+        const screenX = blockWorldX - camera.x;
+        const screenY = blockWorldY - camera.y;
+
+        gl.uniform2f(translationUniformLocation, screenX, screenY);
         gl.uniform4fv(colorUniformLocation, BLOCK_COLORS[blockType]);
 
         gl.drawArrays(gl.TRIANGLES, 0, 6); // 6 vertices for the two triangles forming a square
       }
     }
+    // --- End Render World Blocks ---
 
     // --- Render Player ---
     // positionAttributeLocation should still be enabled and blockVertexBuffer bound
     // vertexAttribPointer is already set up from rendering blocks
 
+    const playerScreenX = player.x - camera.x;
+    const playerScreenY = player.y - camera.y;
+
     // Set player-specific uniforms
-    gl.uniform2f(translationUniformLocation, player.x, player.y);
-    gl.uniform2f(blockSizeUniformLocation, player.width, player.height);
+    gl.uniform2f(translationUniformLocation, playerScreenX, playerScreenY);
+    gl.uniform2f(blockSizeUniformLocation, player.width, player.height); // Player specific size
     gl.uniform4fv(colorUniformLocation, player.color);
 
     // Draw the player
@@ -884,10 +911,27 @@ try {
   }
   // --- End Water Physics Update ---
 
+  // --- Camera Update ---
+  function updateCamera() {
+    // Target camera position to center the player
+    let targetX = player.x + player.width / 2 - camera.width / 2;
+    let targetY = player.y + player.height / 2 - camera.height / 2;
+
+    // Clamp camera position to world boundaries
+    // World total pixel dimensions
+    const worldPixelWidth = WORLD_WIDTH * BLOCK_SIZE_PIXELS;
+    const worldPixelHeight = WORLD_HEIGHT * BLOCK_SIZE_PIXELS;
+
+    camera.x = Math.max(0, Math.min(targetX, worldPixelWidth - camera.width));
+    camera.y = Math.max(0, Math.min(targetY, worldPixelHeight - camera.height));
+  }
+  // --- End Camera Update ---
+
   // --- Game Loop ---
   function gameLoop() {
     updatePlayer(); // Update player state based on input and physics
     updateWater();  // Update water physics
+    updateCamera(); // Update camera position
     renderWorld(); // Renders both world and player
     requestAnimationFrame(gameLoop);
   }
@@ -907,12 +951,15 @@ try {
 
   // Helper function to get grid coordinates from a mouse click event
   function getClickedGridCoords(event) {
-    const rect = canvas.getBoundingClientRect(); // Gets canvas position and size
-    const clickX = event.clientX - rect.left;    // Click X relative to canvas
-    const clickY = event.clientY - rect.top;     // Click Y relative to canvas
+    const rect = canvas.getBoundingClientRect();
+    const canvasClickX = event.clientX - rect.left;
+    const canvasClickY = event.clientY - rect.top;
 
-    const gx = Math.floor(clickX / BLOCK_SIZE_PIXELS);
-    const gy = Math.floor(clickY / BLOCK_SIZE_PIXELS);
+    const worldClickX = canvasClickX + camera.x;
+    const worldClickY = canvasClickY + camera.y;
+
+    const gx = Math.floor(worldClickX / BLOCK_SIZE_PIXELS);
+    const gy = Math.floor(worldClickY / BLOCK_SIZE_PIXELS);
 
     return { gx, gy };
   }
