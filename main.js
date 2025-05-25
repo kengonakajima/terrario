@@ -36,7 +36,7 @@ const BLOCK_TYPES = {
   STONE: 2,
   WATER: 3, // New water block type
   COAL_ORE: 4, // New coal ore block type
-  // GRASS: 5, // Example for future expansion
+  GRASS: 5,
 };
 
 const BLOCK_COLORS = {
@@ -45,11 +45,12 @@ const BLOCK_COLORS = {
   [BLOCK_TYPES.STONE]: [0.5, 0.5, 0.5, 1.0], // Grey color for stone
   [BLOCK_TYPES.WATER]: [0.2, 0.5, 1.0, 0.7], // Semi-transparent blue for water
   [BLOCK_TYPES.COAL_ORE]: [0.3, 0.3, 0.3, 1.0], // Dark grey for coal ore
-  // [BLOCK_TYPES.GRASS]: [0.0, 0.8, 0.0, 1.0],
+  [BLOCK_TYPES.GRASS]: [0.0, 0.8, 0.0, 1.0], // Green color for grass
 };
 
 // World grid
 let worldGrid = [];
+let sunlightGrid = []; // Grid to store sunlight information
 
 // Keyboard input state
 const keysPressed = {};
@@ -558,8 +559,52 @@ function initializeWorld() {
   }
   // --- End Pond Generation ---
 
+  // Initialize sunlightGrid
+  sunlightGrid = new Array(WORLD_HEIGHT);
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    sunlightGrid[y] = new Array(WORLD_WIDTH).fill(false);
+  }
+  updateSunlight(); // Initial sunlight calculation
+  updateGrass(); // Initial grass growth
+
   console.log("World initialized with noise-based terrain, caves, ores, and ponds."); // For debugging
 }
+
+// --- Sunlight Propagation ---
+function isBlockTransparentForSunlight(blockType) {
+  return blockType === BLOCK_TYPES.AIR || blockType === BLOCK_TYPES.WATER;
+}
+
+function updateSunlight() {
+  for (let x = 0; x < WORLD_WIDTH; x++) {
+    let sunIsShining = true;
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      if (sunIsShining) {
+        if (isBlockTransparentForSunlight(worldGrid[y][x])) {
+          sunlightGrid[y][x] = true;
+        } else {
+          sunlightGrid[y][x] = false;
+          sunIsShining = false;
+        }
+      } else {
+        sunlightGrid[y][x] = false;
+      }
+    }
+  }
+}
+// --- End Sunlight Propagation ---
+
+// --- Grass Growth ---
+function updateGrass() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      if (worldGrid[y][x] === BLOCK_TYPES.DIRT && sunlightGrid[y][x] === true) {
+        worldGrid[y][x] = BLOCK_TYPES.GRASS;
+      }
+    }
+  }
+}
+// --- End Grass Growth ---
 
 // Vertex Shader source code
 const vsSource = `
@@ -1151,6 +1196,7 @@ try {
   function gameLoop() {
     updatePlayer(); // Update player state based on input and physics
     updateWater();  // Update water physics
+    // updateSunlight(); // Potentially call here if sunlight changes dynamically without block changes
     updateCamera(); // Update camera position
     renderWorld(); // Renders both world and player
     requestAnimationFrame(gameLoop);
@@ -1225,6 +1271,8 @@ try {
           }
           
           worldGrid[gy][gx] = BLOCK_TYPES.AIR;
+          updateSunlight(); // Recalculate sunlight after digging
+          updateGrass(); // Update grass after sunlight changes
           renderWorld(); // Redraw the world to show the change
         }
       } else {
