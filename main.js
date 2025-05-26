@@ -577,6 +577,7 @@ function isBlockTransparentForSunlight(blockType) {
 
 function updateSunlight() {
   for (let x = 0; x < WORLD_WIDTH; x++) {
+    console.log(`Processing sunlight for column x: ${x}`);
     let sunIsShining = true;
     for (let y = 0; y < WORLD_HEIGHT; y++) {
       if (sunIsShining) {
@@ -585,11 +586,18 @@ function updateSunlight() {
         } else {
           sunlightGrid[y][x] = false;
           sunIsShining = false;
+          console.log(`Sunlight blocked at x: ${x}, y: ${y}`);
         }
       } else {
         sunlightGrid[y][x] = false;
       }
     }
+    // Log top sunlight values for the current column
+    let topSunlight = [];
+    for (let i = 0; i < Math.min(5, WORLD_HEIGHT); i++) {
+      topSunlight.push(sunlightGrid[i][x]);
+    }
+    console.log(`Top sunlight for column x: ${x}: `, topSunlight);
   }
 }
 // --- End Sunlight Propagation ---
@@ -598,8 +606,12 @@ function updateSunlight() {
 function updateGrass() {
   for (let y = 0; y < WORLD_HEIGHT; y++) {
     for (let x = 0; x < WORLD_WIDTH; x++) {
-      if (worldGrid[y][x] === BLOCK_TYPES.DIRT && sunlightGrid[y][x] === true) {
-        worldGrid[y][x] = BLOCK_TYPES.GRASS;
+      if (worldGrid[y][x] === BLOCK_TYPES.DIRT) {
+        console.log(`Checking DIRT block at x: ${x}, y: ${y}. Sunlit: ${sunlightGrid[y][x]}`);
+        if (sunlightGrid[y][x] === true) {
+          worldGrid[y][x] = BLOCK_TYPES.GRASS;
+          console.log(`Growing grass at x: ${x}, y: ${y}`);
+        }
       }
     }
   }
